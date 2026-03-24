@@ -3,7 +3,10 @@ import { Renderer } from './game/Renderer.js';
 import { InputManager } from './input/InputManager.js';
 import { ReplayRecorder } from './replay/ReplayRecorder.js';
 import { ReplayPlayer } from './replay/ReplayPlayer.js';
+import { AudioSyncManager } from './audio/AudioSyncManager.js';
 import { MAP_LAYOUT, TILE_SIZE } from './data/map.js';
+
+const BGM_BPM = 100;
 
 const canvas = document.getElementById('game');
 canvas.width = MAP_LAYOUT[0].length * TILE_SIZE;
@@ -13,6 +16,7 @@ const engine = new GameEngine();
 const renderer = new Renderer(canvas);
 const input = new InputManager();
 const recorder = new ReplayRecorder();
+const audioSync = new AudioSyncManager({ src: './assets/bgm.mp3', bpm: BGM_BPM });
 let replayPlayer = new ReplayPlayer([]);
 
 let frame = 0;
@@ -56,6 +60,7 @@ function startPlaying() {
   resetReplayInputState();
   frame = 0;
   gameMode = 'playing';
+  audioSync.start();
 }
 
 function startReplay() {
@@ -67,6 +72,7 @@ function startReplay() {
   resetReplayInputState();
   frame = 0;
   gameMode = 'replay';
+  audioSync.start();
 }
 
 function processCommandEvents(events) {
@@ -109,15 +115,18 @@ function gameLoop() {
 
     if (state.gameOver) {
       gameMode = 'gameover';
+      audioSync.stop();
       console.log('Replay JSON:', recorder.exportJSON());
     }
 
     if (state.stageClear) {
       gameMode = 'stageclear';
+      audioSync.stop();
     }
 
     if (gameMode === 'replay' && replayPlayer.isFinished() && !state.gameOver && !state.stageClear) {
       gameMode = 'title';
+      audioSync.stop();
     }
 
     frame += 1;
@@ -127,6 +136,9 @@ function gameLoop() {
   renderer.render({
     ...engine.getState(),
     gameMode,
+    beat: audioSync.getBeat(),
+    beatProgress: audioSync.getBeatProgress(),
+    bgmPlaying: audioSync.isPlaying,
   });
 
   requestAnimationFrame(gameLoop);
