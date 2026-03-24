@@ -63,6 +63,14 @@ export class InputManager {
     }
   }
 
+  releaseAllDirections() {
+    for (const [key, activeSources] of this.activeSourcesByDirection.entries()) {
+      if (activeSources.size === 0) continue;
+      activeSources.clear();
+      this.events.push({ type: 'keyup', key });
+    }
+  }
+
   onKeyDown(event) {
     if (DIRECTIONS.has(event.key)) {
       event.preventDefault();

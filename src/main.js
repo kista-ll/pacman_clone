@@ -60,6 +60,7 @@ function getReplayDirection() {
 }
 
 function startPlaying() {
+  releaseVirtualInputs();
   engine.reset();
   recorder.reset();
   resetReplayInputState();
@@ -73,6 +74,7 @@ function startReplay() {
   const log = recorder.getLog();
   if (log.length === 0) return;
 
+  releaseVirtualInputs();
   engine.reset();
   replayPlayer = new ReplayPlayer(log);
   resetReplayInputState();
@@ -124,36 +126,42 @@ function bindDirectionButton(button) {
   const source = `virtual:${direction}`;
 
   const press = (event) => {
+    if (!event.isPrimary) return;
     event.preventDefault();
     input.pressDirection(direction, source);
     button.classList.add('is-pressed');
   };
 
   const release = (event) => {
+    if (!event.isPrimary) return;
     event.preventDefault();
     input.releaseDirection(direction, source);
     button.classList.remove('is-pressed');
   };
 
-  button.addEventListener('touchstart', press, { passive: false });
-  button.addEventListener('touchend', release, { passive: false });
-  button.addEventListener('touchcancel', release, { passive: false });
-
-  button.addEventListener('mousedown', press);
-  button.addEventListener('mouseup', release);
-  button.addEventListener('mouseleave', release);
+  button.addEventListener('pointerdown', press);
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointercancel', release);
+  button.addEventListener('lostpointercapture', release);
 }
 
 function bindActionButton(button) {
   const command = button.dataset.command;
 
   const runCommand = (event) => {
+    if (!event.isPrimary) return;
     event.preventDefault();
     handleCommand(command);
   };
 
-  button.addEventListener('touchstart', runCommand, { passive: false });
-  button.addEventListener('mousedown', runCommand);
+  button.addEventListener('pointerdown', runCommand);
+}
+
+function releaseVirtualInputs() {
+  input.releaseAllDirections();
+  for (const button of directionButtons) {
+    button.classList.remove('is-pressed');
+  }
 }
 
 for (const button of directionButtons) {
@@ -219,6 +227,7 @@ function gameLoop() {
 }
 
 window.addEventListener('keydown', onUserCommandKeyDown);
+window.addEventListener('blur', releaseVirtualInputs);
 input.attach();
 updateActionButtons();
 gameLoop();
