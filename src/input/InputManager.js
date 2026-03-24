@@ -1,8 +1,19 @@
 const DIRECTIONS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
+const DIRECTION_ALIAS = {
+  up: 'ArrowUp',
+  down: 'ArrowDown',
+  left: 'ArrowLeft',
+  right: 'ArrowRight',
+};
+
 export class InputManager {
   constructor() {
-    this.pressedDirections = new Set();
+    this.activeSourcesByDirection = new Map();
+    for (const direction of DIRECTIONS) {
+      this.activeSourcesByDirection.set(direction, new Set());
+    }
+
     this.events = [];
 
     this.onKeyDown = this.onKeyDown.bind(this);
@@ -19,11 +30,51 @@ export class InputManager {
     window.removeEventListener('keyup', this.onKeyUp);
   }
 
+  normalizeDirectionKey(direction) {
+    if (DIRECTIONS.has(direction)) return direction;
+    return DIRECTION_ALIAS[direction] ?? null;
+  }
+
+  pressDirection(direction, source = 'virtual') {
+    const key = this.normalizeDirectionKey(direction);
+    if (!key) return;
+
+    const activeSources = this.activeSourcesByDirection.get(key);
+    if (activeSources.has(source)) return;
+
+    const wasActive = activeSources.size > 0;
+    activeSources.add(source);
+
+    if (!wasActive) {
+      this.events.push({ type: 'keydown', key });
+    }
+  }
+
+  releaseDirection(direction, source = 'virtual') {
+    const key = this.normalizeDirectionKey(direction);
+    if (!key) return;
+
+    const activeSources = this.activeSourcesByDirection.get(key);
+    if (!activeSources.has(source)) return;
+
+    activeSources.delete(source);
+    if (activeSources.size === 0) {
+      this.events.push({ type: 'keyup', key });
+    }
+  }
+
+  releaseAllDirections() {
+    for (const [key, activeSources] of this.activeSourcesByDirection.entries()) {
+      if (activeSources.size === 0) continue;
+      activeSources.clear();
+      this.events.push({ type: 'keyup', key });
+    }
+  }
+
   onKeyDown(event) {
     if (DIRECTIONS.has(event.key)) {
       event.preventDefault();
-      this.pressedDirections.add(event.key);
-      this.events.push({ type: 'keydown', key: event.key });
+      this.pressDirection(event.key, 'keyboard');
     }
 
     if (event.key === 'Enter' || event.key.toLowerCase() === 'r') {
@@ -34,16 +85,15 @@ export class InputManager {
   onKeyUp(event) {
     if (DIRECTIONS.has(event.key)) {
       event.preventDefault();
-      this.pressedDirections.delete(event.key);
-      this.events.push({ type: 'keyup', key: event.key });
+      this.releaseDirection(event.key, 'keyboard');
     }
   }
 
   getCurrentDirection() {
-    if (this.pressedDirections.has('ArrowUp')) return 'up';
-    if (this.pressedDirections.has('ArrowDown')) return 'down';
-    if (this.pressedDirections.has('ArrowLeft')) return 'left';
-    if (this.pressedDirections.has('ArrowRight')) return 'right';
+    if (this.activeSourcesByDirection.get('ArrowUp').size > 0) return 'up';
+    if (this.activeSourcesByDirection.get('ArrowDown').size > 0) return 'down';
+    if (this.activeSourcesByDirection.get('ArrowLeft').size > 0) return 'left';
+    if (this.activeSourcesByDirection.get('ArrowRight').size > 0) return 'right';
     return null;
   }
 
