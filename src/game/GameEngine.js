@@ -32,6 +32,7 @@ const DEFAULT_GHOST_DIRECTION_ORDER = ['up', 'left', 'down', 'right'];
 
 const PLAYER_SPEED_TILES_PER_FRAME = 1 / 14;
 const GHOST_SPEED_TILES_PER_FRAME = 1 / 16;
+const COLLISION_DISTANCE_THRESHOLD = 0.55;
 const CENTER_EPSILON = 1e-6;
 const COLLISION_EPSILON = 1e-6;
 
@@ -45,6 +46,12 @@ function isClose(a, b, epsilon = CENTER_EPSILON) {
 
 function isSamePosition(a, b, epsilon = COLLISION_EPSILON) {
   return isClose(a.x, b.x, epsilon) && isClose(a.y, b.y, epsilon);
+}
+
+function distanceBetween(a, b) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 function createPlayer() {
@@ -134,28 +141,49 @@ export class GameEngine {
   }
 
   chooseGhostDirection() {
-    if (!this.ghost.currentDirection) {
-      for (const direction of DEFAULT_GHOST_DIRECTION_ORDER) {
-        if (this.canMove(this.ghost, direction)) {
-          return direction;
-        }
-      }
+    const currentDirection = this.ghost.currentDirection;
+    const reverse = currentDirection ? OPPOSITE_DIRECTION[currentDirection] : null;
+
+    const candidates = currentDirection
+      ? [currentDirection, LEFT_TURN[currentDirection], RIGHT_TURN[currentDirection], reverse]
+      : DEFAULT_GHOST_DIRECTION_ORDER;
+
+    const walkableDirections = candidates.filter((direction) => direction && this.canMove(this.ghost, direction));
+    if (walkableDirections.length === 0) {
       return null;
     }
 
-    const forward = this.ghost.currentDirection;
-    const left = LEFT_TURN[forward];
-    const right = RIGHT_TURN[forward];
-    const reverse = OPPOSITE_DIRECTION[forward];
+    const nonReverseDirections = reverse
+      ? walkableDirections.filter((direction) => direction !== reverse)
+      : walkableDirections;
+    const prioritizedDirections = nonReverseDirections.length > 0 ? nonReverseDirections : walkableDirections;
 
-    const priorityOrder = [forward, left, right, reverse];
-    for (const direction of priorityOrder) {
-      if (this.canMove(this.ghost, direction)) {
-        return direction;
+    const ghostTile = { x: Math.round(this.ghost.x), y: Math.round(this.ghost.y) };
+    const playerTile = { x: Math.round(this.player.x), y: Math.round(this.player.y) };
+
+    let bestDirection = prioritizedDirections[0];
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const direction of prioritizedDirections) {
+      const nextTile = this.getNextTile(ghostTile, direction);
+      const distanceToPlayer =
+        Math.abs(playerTile.x - nextTile.x) + Math.abs(playerTile.y - nextTile.y);
+
+      if (distanceToPlayer < bestDistance) {
+        bestDistance = distanceToPlayer;
+        bestDirection = direction;
       }
     }
 
-    return null;
+    return bestDirection;
+  }
+
+  getNextTile(fromTile, direction) {
+    const vector = DIRECTION_VECTORS[direction];
+    return {
+      x: fromTile.x + vector.x,
+      y: fromTile.y + vector.y,
+    };
   }
 
   collectDot() {
@@ -176,8 +204,9 @@ export class GameEngine {
     const samePositionCollision = isSamePosition(currentPlayer, currentGhost);
     const swappedCollision =
       isSamePosition(currentPlayer, previousGhost) && isSamePosition(currentGhost, previousPlayer);
+    const distanceCollision = distanceBetween(currentPlayer, currentGhost) <= COLLISION_DISTANCE_THRESHOLD;
 
-    if (samePositionCollision || swappedCollision) {
+    if (samePositionCollision || swappedCollision || distanceCollision) {
       this.gameOver = true;
     }
   }
