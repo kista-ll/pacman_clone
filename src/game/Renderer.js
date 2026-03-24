@@ -57,6 +57,9 @@ export class Renderer {
     if (gameMode === 'gameover') {
       this.drawOverlay('Game Over - Press Enter');
     }
+    if (gameMode === 'stageclear') {
+      this.drawOverlay('Stage Clear - Press Enter');
+    }
   }
 
   drawOverlay(text) {

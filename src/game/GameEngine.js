@@ -85,6 +85,7 @@ export class GameEngine {
     this.ghost = createGhost();
     this.score = 0;
     this.gameOver = false;
+    this.stageClear = false;
   }
 
   setNextPlayerDirection(direction) {
@@ -92,7 +93,7 @@ export class GameEngine {
   }
 
   update() {
-    if (this.gameOver) return;
+    if (this.gameOver || this.stageClear) return;
 
     const previousPlayer = { x: this.player.x, y: this.player.y };
     const previousGhost = { x: this.ghost.x, y: this.ghost.y };
@@ -194,7 +195,21 @@ export class GameEngine {
     if (this.map[tileY][tileX] === 2) {
       this.map[tileY][tileX] = 0;
       this.score += 10;
+      if (!this.hasRemainingDots()) {
+        this.stageClear = true;
+      }
     }
+  }
+
+  hasRemainingDots() {
+    for (const row of this.map) {
+      for (const tile of row) {
+        if (tile === 2) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   checkCollisions(previousPlayer = this.player, previousGhost = this.ghost) {
@@ -244,6 +259,7 @@ export class GameEngine {
       ghost: { x: this.ghost.x, y: this.ghost.y },
       score: this.score,
       gameOver: this.gameOver,
+      stageClear: this.stageClear,
     };
   }
 }
