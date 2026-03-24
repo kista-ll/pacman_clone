@@ -93,13 +93,13 @@ function gameLoop() {
   processCommandEvents(events);
   if (gameMode === 'playing') {
     recorder.record(frame, events);
-    engine.setPlayerDirection(input.getCurrentDirection());
+    engine.setNextPlayerDirection(input.getCurrentDirection());
   } else if (gameMode === 'replay') {
     const replayEvents = replayPlayer.getEventsForFrame(frame);
     applyEventsToReplayInput(replayEvents);
-    engine.setPlayerDirection(getReplayDirection());
+    engine.setNextPlayerDirection(getReplayDirection());
   } else {
-    engine.setPlayerDirection(null);
+    engine.setNextPlayerDirection(null);
   }
 
   // update + collision (inside engine)
