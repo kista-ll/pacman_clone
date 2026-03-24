@@ -1,5 +1,19 @@
 import { TILE_SIZE } from '../data/map.js';
 
+function getPulseStrength(beatProgress, enabled) {
+  if (!enabled) return 0;
+  const wave = Math.sin(beatProgress * Math.PI * 2);
+  return (wave + 1) / 2;
+}
+
+function getFloorColor(beatProgress, enabled) {
+  const pulse = getPulseStrength(beatProgress, enabled);
+  const min = 8;
+  const max = 22;
+  const value = Math.round(min + (max - min) * pulse);
+  return `rgb(${value}, ${value}, ${value})`;
+}
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -8,7 +22,8 @@ export class Renderer {
 
   render(viewModel) {
     const { ctx, canvas } = this;
-    const { map, player, ghost, score, gameMode } = viewModel;
+    const { map, player, ghost, score, gameMode, beatProgress = 0, bgmPlaying = false } = viewModel;
+    const floorColor = getFloorColor(beatProgress, bgmPlaying);
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -22,7 +37,7 @@ export class Renderer {
           ctx.fillStyle = '#1b3c96';
           ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
         } else {
-          ctx.fillStyle = '#000';
+          ctx.fillStyle = floorColor;
           ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
           if (tile === 2) {
             ctx.fillStyle = '#ffd54f';
