@@ -75,20 +75,19 @@ function startReplay() {
   audioSync.start();
 }
 
-function processCommandEvents(events) {
-  for (const event of events) {
-    if (event.type !== 'command') continue;
+function onUserCommandKeyDown(event) {
+  if (event.repeat) return;
+  const key = event.key.toLowerCase();
 
-    const key = event.key.toLowerCase();
-    if (event.key === 'Enter') {
-      if (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear') {
-        startPlaying();
-      }
+  if (event.key === 'Enter') {
+    if (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear') {
+      startPlaying();
     }
+    return;
+  }
 
-    if (key === 'r' && (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear')) {
-      startReplay();
-    }
+  if (key === 'r' && (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear')) {
+    startReplay();
   }
 }
 
@@ -96,7 +95,6 @@ function gameLoop() {
   const events = input.consumeEvents();
 
   // input
-  processCommandEvents(events);
   if (gameMode === 'playing') {
     recorder.record(frame, events);
     engine.setNextPlayerDirection(input.getCurrentDirection());
@@ -144,5 +142,6 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
+window.addEventListener('keydown', onUserCommandKeyDown);
 input.attach();
 gameLoop();
