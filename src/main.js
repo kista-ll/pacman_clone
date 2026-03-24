@@ -1,0 +1,131 @@
+import { GameEngine } from './game/GameEngine.js';
+import { Renderer } from './game/Renderer.js';
+import { InputManager } from './input/InputManager.js';
+import { ReplayRecorder } from './replay/ReplayRecorder.js';
+import { ReplayPlayer } from './replay/ReplayPlayer.js';
+import { MAP_LAYOUT, TILE_SIZE } from './data/map.js';
+
+const canvas = document.getElementById('game');
+canvas.width = MAP_LAYOUT[0].length * TILE_SIZE;
+canvas.height = MAP_LAYOUT.length * TILE_SIZE + 16;
+
+const engine = new GameEngine();
+const renderer = new Renderer(canvas);
+const input = new InputManager();
+const recorder = new ReplayRecorder();
+let replayPlayer = new ReplayPlayer([]);
+
+let frame = 0;
+let gameMode = 'title'; // title | playing | replay | gameover
+
+const replayInputState = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+};
+
+function resetReplayInputState() {
+  replayInputState.up = false;
+  replayInputState.down = false;
+  replayInputState.left = false;
+  replayInputState.right = false;
+}
+
+function applyEventsToReplayInput(events) {
+  for (const event of events) {
+    const active = event.type === 'keydown';
+    if (event.key === 'ArrowUp') replayInputState.up = active;
+    if (event.key === 'ArrowDown') replayInputState.down = active;
+    if (event.key === 'ArrowLeft') replayInputState.left = active;
+    if (event.key === 'ArrowRight') replayInputState.right = active;
+  }
+}
+
+function getReplayDirection() {
+  if (replayInputState.up) return 'up';
+  if (replayInputState.down) return 'down';
+  if (replayInputState.left) return 'left';
+  if (replayInputState.right) return 'right';
+  return null;
+}
+
+function startPlaying() {
+  engine.reset();
+  recorder.reset();
+  resetReplayInputState();
+  frame = 0;
+  gameMode = 'playing';
+}
+
+function startReplay() {
+  const log = recorder.getLog();
+  if (log.length === 0) return;
+
+  engine.reset();
+  replayPlayer = new ReplayPlayer(log);
+  resetReplayInputState();
+  frame = 0;
+  gameMode = 'replay';
+}
+
+function processCommandEvents(events) {
+  for (const event of events) {
+    if (event.type !== 'command') continue;
+
+    const key = event.key.toLowerCase();
+    if (event.key === 'Enter') {
+      if (gameMode === 'title' || gameMode === 'gameover') {
+        startPlaying();
+      }
+    }
+
+    if (key === 'r' && (gameMode === 'title' || gameMode === 'gameover')) {
+      startReplay();
+    }
+  }
+}
+
+function gameLoop() {
+  const events = input.consumeEvents();
+
+  // input
+  processCommandEvents(events);
+  if (gameMode === 'playing') {
+    recorder.record(frame, events);
+    engine.setPlayerDirection(input.getCurrentDirection());
+  } else if (gameMode === 'replay') {
+    const replayEvents = replayPlayer.getEventsForFrame(frame);
+    applyEventsToReplayInput(replayEvents);
+    engine.setPlayerDirection(getReplayDirection());
+  } else {
+    engine.setPlayerDirection(null);
+  }
+
+  // update + collision (inside engine)
+  if (gameMode === 'playing' || gameMode === 'replay') {
+    engine.update();
+
+    if (engine.getState().gameOver) {
+      gameMode = 'gameover';
+      console.log('Replay JSON:', recorder.exportJSON());
+    }
+
+    if (gameMode === 'replay' && replayPlayer.isFinished() && !engine.getState().gameOver) {
+      gameMode = 'gameover';
+    }
+
+    frame += 1;
+  }
+
+  // render
+  renderer.render({
+    ...engine.getState(),
+    gameMode,
+  });
+
+  requestAnimationFrame(gameLoop);
+}
+
+input.attach();
+gameLoop();

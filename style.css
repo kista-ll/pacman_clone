@@ -1,0 +1,29 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #111;
+  color: #eee;
+  font-family: sans-serif;
+}
+
+.app {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+#game {
+  border: 2px solid #444;
+  background: #000;
+}
+
+.help {
+  margin: 0;
+  font-size: 14px;
+}
