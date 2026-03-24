@@ -136,6 +136,7 @@ function onUserCommandKeyDown(event) {
 function bindDirectionButton(button) {
   const direction = button.dataset.direction;
   const source = `virtual:${direction}`;
+  let activePointerId = null;
   const preventDoubleTapSelection = (event) => {
     event.preventDefault();
   };
@@ -143,15 +144,22 @@ function bindDirectionButton(button) {
   const press = (event) => {
     if (!event.isPrimary) return;
     event.preventDefault();
+    activePointerId = event.pointerId;
+    if (button.setPointerCapture) {
+      button.setPointerCapture(event.pointerId);
+    }
     input.pressDirection(direction, source);
     button.classList.add('is-pressed');
   };
 
   const release = (event) => {
-    if (!event.isPrimary) return;
+    if (!event.isPrimary && event.type !== 'lostpointercapture') return;
+    if (activePointerId === null) return;
+    if (activePointerId !== null && event.pointerId !== activePointerId) return;
     event.preventDefault();
     input.releaseDirection(direction, source);
     button.classList.remove('is-pressed');
+    activePointerId = null;
   };
 
   button.addEventListener('pointerdown', press);
