@@ -12,6 +12,11 @@ const canvas = document.getElementById('game');
 canvas.width = MAP_LAYOUT[0].length * TILE_SIZE;
 canvas.height = MAP_LAYOUT.length * TILE_SIZE + 16;
 
+const actionStartButton = document.querySelector('[data-command="start"]');
+const actionReplayButton = document.querySelector('[data-command="replay"]');
+const actionRetryButton = document.querySelector('[data-command="retry"]');
+const directionButtons = document.querySelectorAll('[data-direction]');
+
 const engine = new GameEngine();
 const renderer = new Renderer(canvas);
 const input = new InputManager();
@@ -61,6 +66,7 @@ function startPlaying() {
   frame = 0;
   gameMode = 'playing';
   audioSync.start();
+  updateActionButtons();
 }
 
 function startReplay() {
@@ -73,6 +79,30 @@ function startReplay() {
   frame = 0;
   gameMode = 'replay';
   audioSync.start();
+  updateActionButtons();
+}
+
+function updateActionButtons() {
+  const onTitle = gameMode === 'title';
+  const onResult = gameMode === 'gameover' || gameMode === 'stageclear';
+  const replayAvailable = recorder.getLog().length > 0;
+
+  actionStartButton.hidden = !onTitle;
+  actionRetryButton.hidden = !onResult;
+  actionReplayButton.hidden = !(onTitle || onResult);
+  actionReplayButton.disabled = !replayAvailable;
+}
+
+function handleCommand(command) {
+  if (command === 'start' || command === 'retry') {
+    if (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear') {
+      startPlaying();
+    }
+  }
+
+  if (command === 'replay' && (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear')) {
+    startReplay();
+  }
 }
 
 function onUserCommandKeyDown(event) {
@@ -80,16 +110,59 @@ function onUserCommandKeyDown(event) {
   const key = event.key.toLowerCase();
 
   if (event.key === 'Enter') {
-    if (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear') {
-      startPlaying();
-    }
+    handleCommand('start');
     return;
   }
 
-  if (key === 'r' && (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear')) {
-    startReplay();
+  if (key === 'r') {
+    handleCommand('replay');
   }
 }
+
+function bindDirectionButton(button) {
+  const direction = button.dataset.direction;
+  const source = `virtual:${direction}`;
+
+  const press = (event) => {
+    event.preventDefault();
+    input.pressDirection(direction, source);
+    button.classList.add('is-pressed');
+  };
+
+  const release = (event) => {
+    event.preventDefault();
+    input.releaseDirection(direction, source);
+    button.classList.remove('is-pressed');
+  };
+
+  button.addEventListener('touchstart', press, { passive: false });
+  button.addEventListener('touchend', release, { passive: false });
+  button.addEventListener('touchcancel', release, { passive: false });
+
+  button.addEventListener('mousedown', press);
+  button.addEventListener('mouseup', release);
+  button.addEventListener('mouseleave', release);
+}
+
+function bindActionButton(button) {
+  const command = button.dataset.command;
+
+  const runCommand = (event) => {
+    event.preventDefault();
+    handleCommand(command);
+  };
+
+  button.addEventListener('touchstart', runCommand, { passive: false });
+  button.addEventListener('mousedown', runCommand);
+}
+
+for (const button of directionButtons) {
+  bindDirectionButton(button);
+}
+
+bindActionButton(actionStartButton);
+bindActionButton(actionReplayButton);
+bindActionButton(actionRetryButton);
 
 function gameLoop() {
   const events = input.consumeEvents();
@@ -115,16 +188,19 @@ function gameLoop() {
       gameMode = 'gameover';
       audioSync.stop();
       console.log('Replay JSON:', recorder.exportJSON());
+      updateActionButtons();
     }
 
     if (state.stageClear) {
       gameMode = 'stageclear';
       audioSync.stop();
+      updateActionButtons();
     }
 
     if (gameMode === 'replay' && replayPlayer.isFinished() && !state.gameOver && !state.stageClear) {
       gameMode = 'title';
       audioSync.stop();
+      updateActionButtons();
     }
 
     frame += 1;
@@ -144,4 +220,5 @@ function gameLoop() {
 
 window.addEventListener('keydown', onUserCommandKeyDown);
 input.attach();
+updateActionButtons();
 gameLoop();
