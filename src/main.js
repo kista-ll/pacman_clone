@@ -112,7 +112,7 @@ function gameLoop() {
     }
 
     if (gameMode === 'replay' && replayPlayer.isFinished() && !engine.getState().gameOver) {
-      gameMode = 'gameover';
+      gameMode = 'title';
     }
 
     frame += 1;

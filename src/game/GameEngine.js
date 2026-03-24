@@ -35,10 +35,16 @@ export class GameEngine {
   update() {
     if (this.gameOver) return;
 
+    const previousPlayer = { ...this.player };
+    const previousGhost = { ...this.ghost };
+
     this.updatePlayer();
+    this.checkCollisions(previousPlayer, previousGhost);
+    if (this.gameOver) return;
+
     this.updateGhost();
     this.collectDot();
-    this.checkCollisions();
+    this.checkCollisions(previousPlayer, previousGhost);
   }
 
   updatePlayer() {
@@ -81,8 +87,15 @@ export class GameEngine {
     }
   }
 
-  checkCollisions() {
-    if (this.player.x === this.ghost.x && this.player.y === this.ghost.y) {
+  checkCollisions(previousPlayer = this.player, previousGhost = this.ghost) {
+    const sameTileCollision = this.player.x === this.ghost.x && this.player.y === this.ghost.y;
+    const swappedCollision =
+      this.player.x === previousGhost.x &&
+      this.player.y === previousGhost.y &&
+      this.ghost.x === previousPlayer.x &&
+      this.ghost.y === previousPlayer.y;
+
+    if (sameTileCollision || swappedCollision) {
       this.gameOver = true;
     }
   }
