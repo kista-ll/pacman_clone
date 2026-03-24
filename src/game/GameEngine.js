@@ -7,7 +7,6 @@ const DIRECTION_VECTORS = {
   right: { x: 1, y: 0 },
 };
 
-const DIRECTION_ORDER = ['up', 'left', 'down', 'right'];
 const OPPOSITE_DIRECTION = {
   up: 'down',
   down: 'up',
@@ -15,8 +14,24 @@ const OPPOSITE_DIRECTION = {
   right: 'left',
 };
 
-const PLAYER_SPEED_TILES_PER_FRAME = 1 / 10;
-const GHOST_SPEED_TILES_PER_FRAME = 1 / 12;
+const LEFT_TURN = {
+  up: 'left',
+  left: 'down',
+  down: 'right',
+  right: 'up',
+};
+
+const RIGHT_TURN = {
+  up: 'right',
+  right: 'down',
+  down: 'left',
+  left: 'up',
+};
+
+const DEFAULT_GHOST_DIRECTION_ORDER = ['up', 'left', 'down', 'right'];
+
+const PLAYER_SPEED_TILES_PER_FRAME = 1 / 14;
+const GHOST_SPEED_TILES_PER_FRAME = 1 / 16;
 const CENTER_EPSILON = 1e-6;
 const COLLISION_EPSILON = 1e-6;
 
@@ -61,7 +76,6 @@ export class GameEngine {
     this.map = cloneMap(MAP_LAYOUT);
     this.player = createPlayer();
     this.ghost = createGhost();
-    this.ghostDecisionStep = 0;
     this.score = 0;
     this.gameOver = false;
   }
@@ -120,31 +134,28 @@ export class GameEngine {
   }
 
   chooseGhostDirection() {
-    const base = this.ghostDecisionStep % DIRECTION_ORDER.length;
-    const prioritized = [
-      DIRECTION_ORDER[base],
-      DIRECTION_ORDER[(base + 1) % DIRECTION_ORDER.length],
-      DIRECTION_ORDER[(base + 2) % DIRECTION_ORDER.length],
-      DIRECTION_ORDER[(base + 3) % DIRECTION_ORDER.length],
-    ];
+    if (!this.ghost.currentDirection) {
+      for (const direction of DEFAULT_GHOST_DIRECTION_ORDER) {
+        if (this.canMove(this.ghost, direction)) {
+          return direction;
+        }
+      }
+      return null;
+    }
 
-    const reverse = this.ghost.currentDirection ? OPPOSITE_DIRECTION[this.ghost.currentDirection] : null;
+    const forward = this.ghost.currentDirection;
+    const left = LEFT_TURN[forward];
+    const right = RIGHT_TURN[forward];
+    const reverse = OPPOSITE_DIRECTION[forward];
 
-    let selected = null;
-    for (const direction of prioritized) {
-      if (reverse && direction === reverse) continue;
+    const priorityOrder = [forward, left, right, reverse];
+    for (const direction of priorityOrder) {
       if (this.canMove(this.ghost, direction)) {
-        selected = direction;
-        break;
+        return direction;
       }
     }
 
-    if (!selected && reverse && this.canMove(this.ghost, reverse)) {
-      selected = reverse;
-    }
-
-    this.ghostDecisionStep += 1;
-    return selected;
+    return null;
   }
 
   collectDot() {
