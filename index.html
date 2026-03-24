@@ -2,14 +2,35 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pacman Clone M1</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Pacman Clone M2.5</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main class="app">
       <canvas id="game" width="448" height="496" aria-label="Pacman game canvas"></canvas>
-      <p class="help">Enter: Start / R: Replay / Arrow Keys: Move</p>
+
+      <section class="action-controls" aria-label="game actions">
+        <button type="button" class="action-btn" data-command="start">Start</button>
+        <button type="button" class="action-btn" data-command="replay">Replay</button>
+        <button type="button" class="action-btn" data-command="retry">Retry</button>
+      </section>
+
+      <section class="touch-controls" aria-label="direction controls">
+        <div class="dpad-grid">
+          <div></div>
+          <button type="button" class="dir-btn" data-direction="up" aria-label="move up">▲</button>
+          <div></div>
+          <button type="button" class="dir-btn" data-direction="left" aria-label="move left">◀</button>
+          <div></div>
+          <button type="button" class="dir-btn" data-direction="right" aria-label="move right">▶</button>
+          <div></div>
+          <button type="button" class="dir-btn" data-direction="down" aria-label="move down">▼</button>
+          <div></div>
+        </div>
+      </section>
+
+      <p class="help">Enter: Start / R: Replay / Arrow Keys or D-Pad: Move</p>
     </main>
     <script type="module" src="./src/main.js"></script>
   </body>

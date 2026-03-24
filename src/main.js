@@ -12,6 +12,12 @@ const canvas = document.getElementById('game');
 canvas.width = MAP_LAYOUT[0].length * TILE_SIZE;
 canvas.height = MAP_LAYOUT.length * TILE_SIZE + 16;
 
+const actionStartButton = document.querySelector('[data-command="start"]');
+const actionReplayButton = document.querySelector('[data-command="replay"]');
+const actionRetryButton = document.querySelector('[data-command="retry"]');
+const directionButtons = document.querySelectorAll('[data-direction]');
+const helpText = document.querySelector('.help');
+
 const engine = new GameEngine();
 const renderer = new Renderer(canvas);
 const input = new InputManager();
@@ -54,25 +60,63 @@ function getReplayDirection() {
   return null;
 }
 
-function startPlaying() {
+function setAudioRetryHint(shouldShow) {
+  if (!helpText) return;
+  if (shouldShow) {
+    helpText.textContent = '音声を有効化するには、もう一度 Start をタップしてください。';
+    return;
+  }
+  helpText.textContent = 'Enter: Start / R: Replay / Arrow Keys or D-Pad: Move';
+}
+
+async function startPlaying() {
+  releaseVirtualInputs();
   engine.reset();
   recorder.reset();
   resetReplayInputState();
   frame = 0;
   gameMode = 'playing';
-  audioSync.start();
+  const bgmStarted = await audioSync.start();
+  setAudioRetryHint(!bgmStarted);
+  updateActionButtons();
 }
 
-function startReplay() {
+async function startReplay() {
   const log = recorder.getLog();
   if (log.length === 0) return;
 
+  releaseVirtualInputs();
   engine.reset();
   replayPlayer = new ReplayPlayer(log);
   resetReplayInputState();
   frame = 0;
   gameMode = 'replay';
-  audioSync.start();
+  const bgmStarted = await audioSync.start();
+  setAudioRetryHint(!bgmStarted);
+  updateActionButtons();
+}
+
+function updateActionButtons() {
+  const onTitle = gameMode === 'title';
+  const onResult = gameMode === 'gameover' || gameMode === 'stageclear';
+  const replayAvailable = recorder.getLog().length > 0;
+
+  actionStartButton.hidden = !onTitle;
+  actionRetryButton.hidden = !onResult;
+  actionReplayButton.hidden = !(onTitle || onResult);
+  actionReplayButton.disabled = !replayAvailable;
+}
+
+async function handleCommand(command) {
+  if (command === 'start' || command === 'retry') {
+    if (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear') {
+      await startPlaying();
+    }
+  }
+
+  if (command === 'replay' && (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear')) {
+    await startReplay();
+  }
 }
 
 function onUserCommandKeyDown(event) {
@@ -80,16 +124,69 @@ function onUserCommandKeyDown(event) {
   const key = event.key.toLowerCase();
 
   if (event.key === 'Enter') {
-    if (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear') {
-      startPlaying();
-    }
+    void handleCommand('start');
     return;
   }
 
-  if (key === 'r' && (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear')) {
-    startReplay();
+  if (key === 'r') {
+    void handleCommand('replay');
   }
 }
+
+function bindDirectionButton(button) {
+  const direction = button.dataset.direction;
+  const source = `virtual:${direction}`;
+  const preventDoubleTapSelection = (event) => {
+    event.preventDefault();
+  };
+
+  const press = (event) => {
+    if (!event.isPrimary) return;
+    event.preventDefault();
+    input.pressDirection(direction, source);
+    button.classList.add('is-pressed');
+  };
+
+  const release = (event) => {
+    if (!event.isPrimary) return;
+    event.preventDefault();
+    input.releaseDirection(direction, source);
+    button.classList.remove('is-pressed');
+  };
+
+  button.addEventListener('pointerdown', press);
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointercancel', release);
+  button.addEventListener('lostpointercapture', release);
+  button.addEventListener('dblclick', preventDoubleTapSelection);
+}
+
+function bindActionButton(button) {
+  const command = button.dataset.command;
+
+  const runCommand = (event) => {
+    if (!event.isPrimary) return;
+    event.preventDefault();
+    void handleCommand(command);
+  };
+
+  button.addEventListener('pointerdown', runCommand);
+}
+
+function releaseVirtualInputs() {
+  input.releaseAllDirections();
+  for (const button of directionButtons) {
+    button.classList.remove('is-pressed');
+  }
+}
+
+for (const button of directionButtons) {
+  bindDirectionButton(button);
+}
+
+bindActionButton(actionStartButton);
+bindActionButton(actionReplayButton);
+bindActionButton(actionRetryButton);
 
 function gameLoop() {
   const events = input.consumeEvents();
@@ -115,16 +212,19 @@ function gameLoop() {
       gameMode = 'gameover';
       audioSync.stop();
       console.log('Replay JSON:', recorder.exportJSON());
+      updateActionButtons();
     }
 
     if (state.stageClear) {
       gameMode = 'stageclear';
       audioSync.stop();
+      updateActionButtons();
     }
 
     if (gameMode === 'replay' && replayPlayer.isFinished() && !state.gameOver && !state.stageClear) {
       gameMode = 'title';
       audioSync.stop();
+      updateActionButtons();
     }
 
     frame += 1;
@@ -143,5 +243,7 @@ function gameLoop() {
 }
 
 window.addEventListener('keydown', onUserCommandKeyDown);
+window.addEventListener('blur', releaseVirtualInputs);
 input.attach();
+updateActionButtons();
 gameLoop();
