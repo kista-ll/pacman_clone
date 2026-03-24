@@ -16,6 +16,7 @@ const actionStartButton = document.querySelector('[data-command="start"]');
 const actionReplayButton = document.querySelector('[data-command="replay"]');
 const actionRetryButton = document.querySelector('[data-command="retry"]');
 const directionButtons = document.querySelectorAll('[data-direction]');
+const helpText = document.querySelector('.help');
 
 const engine = new GameEngine();
 const renderer = new Renderer(canvas);
@@ -59,18 +60,28 @@ function getReplayDirection() {
   return null;
 }
 
-function startPlaying() {
+function setAudioRetryHint(shouldShow) {
+  if (!helpText) return;
+  if (shouldShow) {
+    helpText.textContent = '音声を有効化するには、もう一度 Start をタップしてください。';
+    return;
+  }
+  helpText.textContent = 'Enter: Start / R: Replay / Arrow Keys or D-Pad: Move';
+}
+
+async function startPlaying() {
   releaseVirtualInputs();
   engine.reset();
   recorder.reset();
   resetReplayInputState();
   frame = 0;
   gameMode = 'playing';
-  audioSync.start();
+  const bgmStarted = await audioSync.start();
+  setAudioRetryHint(!bgmStarted);
   updateActionButtons();
 }
 
-function startReplay() {
+async function startReplay() {
   const log = recorder.getLog();
   if (log.length === 0) return;
 
@@ -80,7 +91,8 @@ function startReplay() {
   resetReplayInputState();
   frame = 0;
   gameMode = 'replay';
-  audioSync.start();
+  const bgmStarted = await audioSync.start();
+  setAudioRetryHint(!bgmStarted);
   updateActionButtons();
 }
 
@@ -95,15 +107,15 @@ function updateActionButtons() {
   actionReplayButton.disabled = !replayAvailable;
 }
 
-function handleCommand(command) {
+async function handleCommand(command) {
   if (command === 'start' || command === 'retry') {
     if (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear') {
-      startPlaying();
+      await startPlaying();
     }
   }
 
   if (command === 'replay' && (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear')) {
-    startReplay();
+    await startReplay();
   }
 }
 
@@ -112,18 +124,21 @@ function onUserCommandKeyDown(event) {
   const key = event.key.toLowerCase();
 
   if (event.key === 'Enter') {
-    handleCommand('start');
+    void handleCommand('start');
     return;
   }
 
   if (key === 'r') {
-    handleCommand('replay');
+    void handleCommand('replay');
   }
 }
 
 function bindDirectionButton(button) {
   const direction = button.dataset.direction;
   const source = `virtual:${direction}`;
+  const preventDoubleTapSelection = (event) => {
+    event.preventDefault();
+  };
 
   const press = (event) => {
     if (!event.isPrimary) return;
@@ -143,6 +158,7 @@ function bindDirectionButton(button) {
   button.addEventListener('pointerup', release);
   button.addEventListener('pointercancel', release);
   button.addEventListener('lostpointercapture', release);
+  button.addEventListener('dblclick', preventDoubleTapSelection);
 }
 
 function bindActionButton(button) {
@@ -151,7 +167,7 @@ function bindActionButton(button) {
   const runCommand = (event) => {
     if (!event.isPrimary) return;
     event.preventDefault();
-    handleCommand(command);
+    void handleCommand(command);
   };
 
   button.addEventListener('pointerdown', runCommand);

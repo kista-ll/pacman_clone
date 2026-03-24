@@ -38,10 +38,12 @@ export class AudioSyncManager {
       this.startedAt = performance.now() / 1000;
       this.isPlaying = true;
       await this.audio.play();
+      return true;
     } catch (error) {
       this.isPlaying = false;
       this.startedAt = null;
       console.warn('BGM play failed:', error);
+      return false;
     }
   }
 
