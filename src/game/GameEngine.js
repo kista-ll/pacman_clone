@@ -7,7 +7,6 @@ const DIRECTION_VECTORS = {
   right: { x: 1, y: 0 },
 };
 
-const DIRECTION_ORDER = ['up', 'left', 'down', 'right'];
 const OPPOSITE_DIRECTION = {
   up: 'down',
   down: 'up',
@@ -15,8 +14,25 @@ const OPPOSITE_DIRECTION = {
   right: 'left',
 };
 
-const PLAYER_SPEED_TILES_PER_FRAME = 1 / 10;
-const GHOST_SPEED_TILES_PER_FRAME = 1 / 12;
+const LEFT_TURN = {
+  up: 'left',
+  left: 'down',
+  down: 'right',
+  right: 'up',
+};
+
+const RIGHT_TURN = {
+  up: 'right',
+  right: 'down',
+  down: 'left',
+  left: 'up',
+};
+
+const DEFAULT_GHOST_DIRECTION_ORDER = ['up', 'left', 'down', 'right'];
+
+const PLAYER_SPEED_TILES_PER_FRAME = 1 / 28;
+const GHOST_SPEED_TILES_PER_FRAME = 1 / 32;
+const COLLISION_DISTANCE_THRESHOLD = 0.55;
 const CENTER_EPSILON = 1e-6;
 const COLLISION_EPSILON = 1e-6;
 
@@ -30,6 +46,12 @@ function isClose(a, b, epsilon = CENTER_EPSILON) {
 
 function isSamePosition(a, b, epsilon = COLLISION_EPSILON) {
   return isClose(a.x, b.x, epsilon) && isClose(a.y, b.y, epsilon);
+}
+
+function distanceBetween(a, b) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 function createPlayer() {
@@ -61,9 +83,9 @@ export class GameEngine {
     this.map = cloneMap(MAP_LAYOUT);
     this.player = createPlayer();
     this.ghost = createGhost();
-    this.ghostDecisionStep = 0;
     this.score = 0;
     this.gameOver = false;
+    this.stageClear = false;
   }
 
   setNextPlayerDirection(direction) {
@@ -71,7 +93,7 @@ export class GameEngine {
   }
 
   update() {
-    if (this.gameOver) return;
+    if (this.gameOver || this.stageClear) return;
 
     const previousPlayer = { x: this.player.x, y: this.player.y };
     const previousGhost = { x: this.ghost.x, y: this.ghost.y };
@@ -120,31 +142,49 @@ export class GameEngine {
   }
 
   chooseGhostDirection() {
-    const base = this.ghostDecisionStep % DIRECTION_ORDER.length;
-    const prioritized = [
-      DIRECTION_ORDER[base],
-      DIRECTION_ORDER[(base + 1) % DIRECTION_ORDER.length],
-      DIRECTION_ORDER[(base + 2) % DIRECTION_ORDER.length],
-      DIRECTION_ORDER[(base + 3) % DIRECTION_ORDER.length],
-    ];
+    const currentDirection = this.ghost.currentDirection;
+    const reverse = currentDirection ? OPPOSITE_DIRECTION[currentDirection] : null;
 
-    const reverse = this.ghost.currentDirection ? OPPOSITE_DIRECTION[this.ghost.currentDirection] : null;
+    const candidates = currentDirection
+      ? [currentDirection, LEFT_TURN[currentDirection], RIGHT_TURN[currentDirection], reverse]
+      : DEFAULT_GHOST_DIRECTION_ORDER;
 
-    let selected = null;
-    for (const direction of prioritized) {
-      if (reverse && direction === reverse) continue;
-      if (this.canMove(this.ghost, direction)) {
-        selected = direction;
-        break;
+    const walkableDirections = candidates.filter((direction) => direction && this.canMove(this.ghost, direction));
+    if (walkableDirections.length === 0) {
+      return null;
+    }
+
+    const nonReverseDirections = reverse
+      ? walkableDirections.filter((direction) => direction !== reverse)
+      : walkableDirections;
+    const prioritizedDirections = nonReverseDirections.length > 0 ? nonReverseDirections : walkableDirections;
+
+    const ghostTile = { x: Math.round(this.ghost.x), y: Math.round(this.ghost.y) };
+    const playerTile = { x: Math.round(this.player.x), y: Math.round(this.player.y) };
+
+    let bestDirection = prioritizedDirections[0];
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const direction of prioritizedDirections) {
+      const nextTile = this.getNextTile(ghostTile, direction);
+      const distanceToPlayer =
+        Math.abs(playerTile.x - nextTile.x) + Math.abs(playerTile.y - nextTile.y);
+
+      if (distanceToPlayer < bestDistance) {
+        bestDistance = distanceToPlayer;
+        bestDirection = direction;
       }
     }
 
-    if (!selected && reverse && this.canMove(this.ghost, reverse)) {
-      selected = reverse;
-    }
+    return bestDirection;
+  }
 
-    this.ghostDecisionStep += 1;
-    return selected;
+  getNextTile(fromTile, direction) {
+    const vector = DIRECTION_VECTORS[direction];
+    return {
+      x: fromTile.x + vector.x,
+      y: fromTile.y + vector.y,
+    };
   }
 
   collectDot() {
@@ -155,7 +195,21 @@ export class GameEngine {
     if (this.map[tileY][tileX] === 2) {
       this.map[tileY][tileX] = 0;
       this.score += 10;
+      if (!this.hasRemainingDots()) {
+        this.stageClear = true;
+      }
     }
+  }
+
+  hasRemainingDots() {
+    for (const row of this.map) {
+      for (const tile of row) {
+        if (tile === 2) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   checkCollisions(previousPlayer = this.player, previousGhost = this.ghost) {
@@ -165,8 +219,9 @@ export class GameEngine {
     const samePositionCollision = isSamePosition(currentPlayer, currentGhost);
     const swappedCollision =
       isSamePosition(currentPlayer, previousGhost) && isSamePosition(currentGhost, previousPlayer);
+    const distanceCollision = distanceBetween(currentPlayer, currentGhost) <= COLLISION_DISTANCE_THRESHOLD;
 
-    if (samePositionCollision || swappedCollision) {
+    if (samePositionCollision || swappedCollision || distanceCollision) {
       this.gameOver = true;
     }
   }
@@ -204,6 +259,7 @@ export class GameEngine {
       ghost: { x: this.ghost.x, y: this.ghost.y },
       score: this.score,
       gameOver: this.gameOver,
+      stageClear: this.stageClear,
     };
   }
 }

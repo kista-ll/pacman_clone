@@ -16,7 +16,7 @@ const recorder = new ReplayRecorder();
 let replayPlayer = new ReplayPlayer([]);
 
 let frame = 0;
-let gameMode = 'title'; // title | playing | replay | gameover
+let gameMode = 'title'; // title | playing | replay | gameover | stageclear
 
 const replayInputState = {
   up: false,
@@ -75,12 +75,12 @@ function processCommandEvents(events) {
 
     const key = event.key.toLowerCase();
     if (event.key === 'Enter') {
-      if (gameMode === 'title' || gameMode === 'gameover') {
+      if (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear') {
         startPlaying();
       }
     }
 
-    if (key === 'r' && (gameMode === 'title' || gameMode === 'gameover')) {
+    if (key === 'r' && (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear')) {
       startReplay();
     }
   }
@@ -105,13 +105,18 @@ function gameLoop() {
   // update + collision (inside engine)
   if (gameMode === 'playing' || gameMode === 'replay') {
     engine.update();
+    const state = engine.getState();
 
-    if (engine.getState().gameOver) {
+    if (state.gameOver) {
       gameMode = 'gameover';
       console.log('Replay JSON:', recorder.exportJSON());
     }
 
-    if (gameMode === 'replay' && replayPlayer.isFinished() && !engine.getState().gameOver) {
+    if (state.stageClear) {
+      gameMode = 'stageclear';
+    }
+
+    if (gameMode === 'replay' && replayPlayer.isFinished() && !state.gameOver && !state.stageClear) {
       gameMode = 'title';
     }
 
