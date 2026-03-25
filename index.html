@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Pacman Clone M2.5</title>
+    <title>Pacman Clone M3</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -14,7 +14,12 @@
         <button type="button" class="action-btn" data-command="start">Start</button>
         <button type="button" class="action-btn" data-command="replay">Replay</button>
         <button type="button" class="action-btn" data-command="retry">Retry</button>
+        <button type="button" class="action-btn" data-command="save-replay">Save Replay</button>
+        <button type="button" class="action-btn" data-command="load-replay">Load Replay</button>
+        <input id="replay-file-input" type="file" accept="application/json,.json" hidden />
       </section>
+
+      <p class="replay-status" data-role="replay-status" data-state="normal" aria-live="polite"></p>
 
       <section class="touch-controls" aria-label="direction controls">
         <div class="dpad-grid">

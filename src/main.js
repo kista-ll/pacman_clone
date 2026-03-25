@@ -15,6 +15,10 @@ canvas.height = MAP_LAYOUT.length * TILE_SIZE + 16;
 const actionStartButton = document.querySelector('[data-command="start"]');
 const actionReplayButton = document.querySelector('[data-command="replay"]');
 const actionRetryButton = document.querySelector('[data-command="retry"]');
+const actionSaveReplayButton = document.querySelector('[data-command="save-replay"]');
+const actionLoadReplayButton = document.querySelector('[data-command="load-replay"]');
+const replayFileInput = document.getElementById('replay-file-input');
+const replayStatusText = document.querySelector('[data-role="replay-status"]');
 const directionButtons = document.querySelectorAll('[data-direction]');
 const helpText = document.querySelector('.help');
 
@@ -24,6 +28,7 @@ const input = new InputManager();
 const recorder = new ReplayRecorder();
 const audioSync = new AudioSyncManager({ src: './assets/bgm.mp3', bpm: BGM_BPM });
 let replayPlayer = new ReplayPlayer([]);
+let loadedReplayLog = [];
 
 let frame = 0;
 let gameMode = 'title'; // title | playing | replay | gameover | stageclear
@@ -34,6 +39,19 @@ const replayInputState = {
   left: false,
   right: false,
 };
+
+function setReplayStatus(message, isError = false) {
+  if (!replayStatusText) return;
+  replayStatusText.textContent = message;
+  replayStatusText.dataset.state = isError ? 'error' : 'normal';
+}
+
+function getReplaySourceLog() {
+  if (loadedReplayLog.length > 0) {
+    return loadedReplayLog.map((entry) => ({ ...entry }));
+  }
+  return recorder.getLog();
+}
 
 function resetReplayInputState() {
   replayInputState.up = false;
@@ -73,6 +91,8 @@ async function startPlaying() {
   releaseVirtualInputs();
   engine.reset();
   recorder.reset();
+  loadedReplayLog = [];
+  setReplayStatus('');
   resetReplayInputState();
   frame = 0;
   gameMode = 'playing';
@@ -82,8 +102,11 @@ async function startPlaying() {
 }
 
 async function startReplay() {
-  const log = recorder.getLog();
-  if (log.length === 0) return;
+  const log = getReplaySourceLog();
+  if (log.length === 0) {
+    setReplayStatus('Replay data is not available.', true);
+    return;
+  }
 
   releaseVirtualInputs();
   engine.reset();
@@ -96,15 +119,80 @@ async function startReplay() {
   updateActionButtons();
 }
 
+function downloadReplayJSON() {
+  const canSave = gameMode === 'gameover' || gameMode === 'stageclear';
+  if (!canSave) {
+    setReplayStatus('Replay can be saved after game over or stage clear.', true);
+    return;
+  }
+
+  const log = recorder.getLog();
+  if (log.length === 0) {
+    setReplayStatus('No replay data to save.', true);
+    return;
+  }
+
+  const json = recorder.exportJSON();
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = recorder.getDownloadFileName();
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+
+  setReplayStatus('Replay JSON downloaded.');
+}
+
+function openReplayFilePicker() {
+  if (!replayFileInput) return;
+  replayFileInput.value = '';
+  replayFileInput.click();
+}
+
+async function handleReplayFileSelected(file) {
+  if (!file) return;
+
+  let text;
+  try {
+    text = await file.text();
+  } catch (_error) {
+    setReplayStatus('Could not read replay file.', true);
+    return;
+  }
+
+  const parsed = ReplayPlayer.parseJSON(text);
+  if (!parsed.valid) {
+    setReplayStatus(parsed.message, true);
+    return;
+  }
+
+  loadedReplayLog = parsed.log.map((entry) => ({ ...entry }));
+  setReplayStatus(`Loaded replay: ${file.name}`);
+  updateActionButtons();
+}
+
 function updateActionButtons() {
   const onTitle = gameMode === 'title';
   const onResult = gameMode === 'gameover' || gameMode === 'stageclear';
-  const replayAvailable = recorder.getLog().length > 0;
+  const replayAvailable = getReplaySourceLog().length > 0;
 
   actionStartButton.hidden = !onTitle;
   actionRetryButton.hidden = !onResult;
   actionReplayButton.hidden = !(onTitle || onResult);
   actionReplayButton.disabled = !replayAvailable;
+
+  if (actionSaveReplayButton) {
+    actionSaveReplayButton.hidden = !onResult;
+    actionSaveReplayButton.disabled = recorder.getLog().length === 0;
+  }
+
+  if (actionLoadReplayButton) {
+    actionLoadReplayButton.hidden = !(onTitle || onResult);
+    actionLoadReplayButton.disabled = gameMode === 'playing' || gameMode === 'replay';
+  }
 }
 
 async function handleCommand(command) {
@@ -116,6 +204,14 @@ async function handleCommand(command) {
 
   if (command === 'replay' && (gameMode === 'title' || gameMode === 'gameover' || gameMode === 'stageclear')) {
     await startReplay();
+  }
+
+  if (command === 'save-replay') {
+    downloadReplayJSON();
+  }
+
+  if (command === 'load-replay') {
+    openReplayFilePicker();
   }
 }
 
@@ -170,6 +266,8 @@ function bindDirectionButton(button) {
 }
 
 function bindActionButton(button) {
+  if (!button) return;
+
   const command = button.dataset.command;
 
   const runCommand = (event) => {
@@ -195,6 +293,15 @@ for (const button of directionButtons) {
 bindActionButton(actionStartButton);
 bindActionButton(actionReplayButton);
 bindActionButton(actionRetryButton);
+bindActionButton(actionSaveReplayButton);
+bindActionButton(actionLoadReplayButton);
+
+if (replayFileInput) {
+  replayFileInput.addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    void handleReplayFileSelected(file);
+  });
+}
 
 function gameLoop() {
   const events = input.consumeEvents();
@@ -219,7 +326,6 @@ function gameLoop() {
     if (state.gameOver) {
       gameMode = 'gameover';
       audioSync.stop();
-      console.log('Replay JSON:', recorder.exportJSON());
       updateActionButtons();
     }
 
