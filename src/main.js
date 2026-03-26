@@ -7,6 +7,10 @@ import { AudioSyncManager } from './audio/AudioSyncManager.js';
 import { MAP_LAYOUT, TILE_SIZE } from './data/map.js';
 
 const BGM_BPM = 100;
+const REPLAY_SOURCE = {
+  RECORDED: 'recorded',
+  LOADED: 'loaded',
+};
 
 const canvas = document.getElementById('game');
 canvas.width = MAP_LAYOUT[0].length * TILE_SIZE;
@@ -29,6 +33,7 @@ const recorder = new ReplayRecorder();
 const audioSync = new AudioSyncManager({ src: './assets/bgm.mp3', bpm: BGM_BPM });
 let replayPlayer = new ReplayPlayer([]);
 let loadedReplayLog = [];
+let replaySourceType = REPLAY_SOURCE.RECORDED;
 
 let frame = 0;
 let gameMode = 'title'; // title | playing | replay | gameover | stageclear
@@ -46,11 +51,31 @@ function setReplayStatus(message, isError = false) {
   replayStatusText.dataset.state = isError ? 'error' : 'normal';
 }
 
-function getReplaySourceLog() {
-  if (loadedReplayLog.length > 0) {
-    return loadedReplayLog.map((entry) => ({ ...entry }));
+function getReplaySource() {
+  const recordedLog = recorder.getLog();
+  const externalLog = loadedReplayLog.map((entry) => ({ ...entry }));
+
+  if (replaySourceType === REPLAY_SOURCE.LOADED && externalLog.length > 0) {
+    return { type: REPLAY_SOURCE.LOADED, log: externalLog };
   }
-  return recorder.getLog();
+
+  if (recordedLog.length > 0) {
+    return { type: REPLAY_SOURCE.RECORDED, log: recordedLog };
+  }
+
+  if (externalLog.length > 0) {
+    return { type: REPLAY_SOURCE.LOADED, log: externalLog };
+  }
+
+  return { type: REPLAY_SOURCE.RECORDED, log: [] };
+}
+
+function getReplaySourceLog() {
+  return getReplaySource().log;
+}
+
+function getReplaySourceLabel(type) {
+  return type === REPLAY_SOURCE.LOADED ? 'Loaded' : 'Last Play';
 }
 
 function resetReplayInputState() {
@@ -92,6 +117,7 @@ async function startPlaying() {
   engine.reset();
   recorder.reset();
   loadedReplayLog = [];
+  replaySourceType = REPLAY_SOURCE.RECORDED;
   setReplayStatus('');
   resetReplayInputState();
   frame = 0;
@@ -102,15 +128,17 @@ async function startPlaying() {
 }
 
 async function startReplay() {
-  const log = getReplaySourceLog();
-  if (log.length === 0) {
+  const source = getReplaySource();
+  if (source.log.length === 0) {
     setReplayStatus('Replay data is not available.', true);
     return;
   }
 
   releaseVirtualInputs();
   engine.reset();
-  replayPlayer = new ReplayPlayer(log);
+  replayPlayer = new ReplayPlayer(source.log);
+  replaySourceType = source.type;
+  setReplayStatus(`Replay source: ${getReplaySourceLabel(source.type)}`);
   resetReplayInputState();
   frame = 0;
   gameMode = 'replay';
@@ -126,13 +154,13 @@ function downloadReplayJSON() {
     return;
   }
 
-  const log = recorder.getLog();
-  if (log.length === 0) {
+  const source = getReplaySource();
+  if (source.log.length === 0) {
     setReplayStatus('No replay data to save.', true);
     return;
   }
 
-  const json = recorder.exportJSON();
+  const json = JSON.stringify(source.log, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -143,7 +171,7 @@ function downloadReplayJSON() {
   anchor.remove();
   URL.revokeObjectURL(url);
 
-  setReplayStatus('Replay JSON downloaded.');
+  setReplayStatus(`Replay JSON downloaded (${getReplaySourceLabel(source.type)}).`);
 }
 
 function openReplayFilePicker() {
@@ -170,6 +198,7 @@ async function handleReplayFileSelected(file) {
   }
 
   loadedReplayLog = parsed.log.map((entry) => ({ ...entry }));
+  replaySourceType = REPLAY_SOURCE.LOADED;
   setReplayStatus(`Loaded replay: ${file.name}`);
   updateActionButtons();
 }
@@ -177,16 +206,18 @@ async function handleReplayFileSelected(file) {
 function updateActionButtons() {
   const onTitle = gameMode === 'title';
   const onResult = gameMode === 'gameover' || gameMode === 'stageclear';
-  const replayAvailable = getReplaySourceLog().length > 0;
+  const source = getReplaySource();
+  const replayAvailable = source.log.length > 0;
 
   actionStartButton.hidden = !onTitle;
   actionRetryButton.hidden = !onResult;
   actionReplayButton.hidden = !(onTitle || onResult);
   actionReplayButton.disabled = !replayAvailable;
+  actionReplayButton.textContent = replayAvailable ? `Replay (${getReplaySourceLabel(source.type)})` : 'Replay';
 
   if (actionSaveReplayButton) {
     actionSaveReplayButton.hidden = !onResult;
-    actionSaveReplayButton.disabled = recorder.getLog().length === 0;
+    actionSaveReplayButton.disabled = source.log.length === 0;
   }
 
   if (actionLoadReplayButton) {
